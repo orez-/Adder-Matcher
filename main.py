@@ -20,15 +20,7 @@ HEIGHT = 5
 WIDTH = 5
 
 
-
-ab = '\x1b[48;5;{}m'
-af = '\x1b[38;5;{}m'
 clear = '\x1b[0m'
-# B: "\033[0;36m▒",
-# Y: "\033[0;33m▒",
-# R: "\033[0;31m▒",
-# G: "\033[0;32m▒",
-# P: "\033[0;35m▒",
 
 
 class GameBoard(object):
@@ -40,9 +32,11 @@ class GameBoard(object):
             ] for _ in range(HEIGHT)
         ]
         self._highest = START_MAX  # TODO?
+        self.last_collapsed = None
 
         # Starting board is pre-collapsed.
-        self._collapse_all()
+        for _ in self._collapse_all():
+            pass
 
 
     def _neighbors(self, r, c):
@@ -96,8 +90,8 @@ class GameBoard(object):
             # TODO: Take a damage.
             return
         # Otherwise collapse it, and start looking for more to collapse.
-        self._collapse(collapse_set, (r, c))
-        self._collapse_all()
+        yield from self._collapse(collapse_set, (r, c))
+        yield from self._collapse_all()
 
     def _collapse_all(self):
         while True:
@@ -105,7 +99,7 @@ class GameBoard(object):
             if not matches:
                 break
             r_c, collapse_set = matches
-            self._collapse(collapse_set, r_c)
+            yield from self._collapse(collapse_set, r_c)
 
     def _collapse(self, collapse_set, r_c):
         """
@@ -122,6 +116,10 @@ class GameBoard(object):
             else:
                 board[x][y] = None
 
+        self.board = list(map(list, zip(*board)))
+        self.last_collapsed = r_c
+        yield self
+
         for column in board:
             column[:] = [elem for elem in column if elem is not None]
             column[:] = [
@@ -129,22 +127,32 @@ class GameBoard(object):
                 for _ in range(HEIGHT - len(column))
             ] + column
         self.board = list(map(list, zip(*board)))
+        self.last_collapsed = None
+        yield self
 
 
 def get_color(elem):
     return ((elem - 1) % 7) + 1
 
 
+num_representation = ' 123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+
 def display_tty(board, selector=None):
     for r, row in enumerate(board.board):
         for c, elem in enumerate(row):
-            if selector == (r, c):
-                print("\033[4{elem};3{elem}m".format(elem=get_color(elem)), end=str(elem))
+            if elem is None:
+                print(end=' ')
+            elif selector == (r, c):
+                print(
+                    "\033[4{elem};3{elem}m".format(elem=get_color(elem)),
+                    end=num_representation[elem],
+                )
                 print(clear, end='')
             else:
-                print("\033[3{}m".format(get_color(elem)), end=str(elem))
+                print("\033[3{}m".format(get_color(elem)), end=num_representation[elem])
         print(clear)
-    print()
+    print('\n')
 
 
 if __name__ == '__main__':
@@ -167,4 +175,6 @@ if __name__ == '__main__':
             r = sorted([0, r + rd, HEIGHT - 1])[1]
             c = sorted([0, c + cd, WIDTH - 1])[1]
         elif key == 'e':
-            board.advance_tile(r, c)
+            for b in board.advance_tile(r, c):
+                display_tty(board, board.last_collapsed)
+                time.sleep(0.5)
