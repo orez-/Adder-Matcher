@@ -8,17 +8,16 @@ import time
 import get_key
 
 
-try:
-    range = xrange
-except:
-    pass
-
-
-START_MAX = 3
+SLEEP_TIME = 0.5
+START_MAX_VALUE = 3
+MAX_HEALTH = 5
 MINIMUM_COLLAPSE = 3
 HEIGHT = 5
 WIDTH = 5
 
+RED = 31
+YELLOW = 33
+GREEN = 32
 
 clear = '\x1b[0m'
 
@@ -27,16 +26,20 @@ class GameBoard(object):
     def __init__(self):
         self.board = [
             [
-                random.randint(1, START_MAX)
+                random.randint(1, START_MAX_VALUE)
                 for _ in range(WIDTH)
             ] for _ in range(HEIGHT)
         ]
-        self._highest = START_MAX  # TODO?
+        self._highest = START_MAX_VALUE  # TODO?
         self.last_collapsed = None
+        self.score = 0
+        self.health = MAX_HEALTH
 
         # Starting board is pre-collapsed.
         for _ in self._collapse_all():
             pass
+
+        self.score = 0
 
 
     def _neighbors(self, r, c):
@@ -85,9 +88,9 @@ class GameBoard(object):
     def advance_tile(self, r, c):
         self.board[r][c] += 1
         collapse_set = self._get_matches_at(r, c)
+        self.health -= 1
         if len(collapse_set) < MINIMUM_COLLAPSE:
             self._highest = max(self._highest, self.board[r][c])
-            # TODO: Take a damage.
             return
         # Otherwise collapse it, and start looking for more to collapse.
         yield from self._collapse(collapse_set, (r, c))
@@ -109,6 +112,8 @@ class GameBoard(object):
         """
         # The board is easier to work with if we flip it on its side.
         board = list(map(list, zip(*self.board)))
+        y, x = r_c
+        value = board[x][y]
         for y, x in collapse_set:
             if (y, x) == r_c:
                 board[x][y] += 1
@@ -118,6 +123,8 @@ class GameBoard(object):
 
         self.board = list(map(list, zip(*board)))
         self.last_collapsed = r_c
+        self.score += len(collapse_set) * value
+        self.health = min(self.health + 1, MAX_HEALTH)
         yield self
 
         for column in board:
@@ -139,6 +146,11 @@ num_representation = ' 123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 
 def display_tty(board, selector=None):
+    print("Score: {:,}".format(board.score * 10))
+    print(("\033[{}m" + "o" * board.health).format({
+        1: RED,
+        MAX_HEALTH: GREEN,
+    }.get(board.health, YELLOW)))
     for r, row in enumerate(board.board):
         for c, elem in enumerate(row):
             if elem is None:
@@ -164,6 +176,10 @@ if __name__ == '__main__':
         'a': (0, -1),
         's': (1, 0),
         'd': (0, 1),
+        '\x1b[A': (-1, 0),
+        '\x1b[D': (0, -1),
+        '\x1b[B': (1, 0),
+        '\x1b[C': (0, 1),
     }
 
     key = 0
@@ -174,7 +190,12 @@ if __name__ == '__main__':
             rd, cd = dir_lookup[key]
             r = sorted([0, r + rd, HEIGHT - 1])[1]
             c = sorted([0, c + cd, WIDTH - 1])[1]
-        elif key == 'e':
+        elif key in 'e \r':
             for b in board.advance_tile(r, c):
                 display_tty(board, board.last_collapsed)
-                time.sleep(0.5)
+                time.sleep(SLEEP_TIME)
+            if not board.health:
+                display_tty(board)
+                board.score += sum(map(sum, board.board))
+                print("Game Over! Final score: {:,}".format(board.score * 10))
+                break
