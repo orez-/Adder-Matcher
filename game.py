@@ -28,7 +28,6 @@ class GameBoard(object):
 
         self.score = 0
 
-
     def _neighbors(self, r, c):
         return [
             ((r1, c1), self.board[r1][c1]) for r1, c1 in

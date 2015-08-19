@@ -24,6 +24,7 @@ except ImportError:
             '\xe0P': DOWN_ARROW,
             '\xe0M': RIGHT_ARROW,
         }
+
         def getch():
             ch = msvcrt.getwch()
             if ch in ('\x00', '\xe0'):
@@ -37,6 +38,7 @@ else:
         '\x1b[B': DOWN_ARROW,
         '\x1b[C': RIGHT_ARROW,
     }
+
     def getch():
         """getch() -> key character
 
