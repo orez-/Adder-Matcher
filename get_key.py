@@ -1,5 +1,11 @@
 import sys
 
+UP_ARROW = object()
+LEFT_ARROW = object()
+RIGHT_ARROW = object()
+DOWN_ARROW = object()
+
+
 try:
     import termios
     import tty
@@ -12,8 +18,25 @@ except ImportError:
         # Just give up here.
         raise ImportError('getch not available')
     else:
-        getch = msvcrt.getch
+        _windows_keys = {
+            '\xe0H': UP_ARROW,
+            '\xe0K': LEFT_ARROW,
+            '\xe0P': DOWN_ARROW,
+            '\xe0M': RIGHT_ARROW,
+        }
+        def getch():
+            ch = msvcrt.getwch()
+            if ch in ('\x00', '\xe0'):
+                ch += msvcrt.getwch()
+                return _windows_keys.get(ch, ch)
+            return ch
 else:
+    _unix_keys = {
+        '\x1b[A': UP_ARROW,
+        '\x1b[D': LEFT_ARROW,
+        '\x1b[B': DOWN_ARROW,
+        '\x1b[C': RIGHT_ARROW,
+    }
     def getch():
         """getch() -> key character
 
@@ -32,6 +55,7 @@ else:
             ch = sys.stdin.read(1)
             if ch == '\x1b':  # arrow key control character
                 ch += sys.stdin.read(2)
+                return _unix_keys.get(ch, ch)
 
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
